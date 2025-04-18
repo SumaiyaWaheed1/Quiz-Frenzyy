@@ -2,10 +2,11 @@ import { connect } from "@/dbConfig/dbConfig";
 import User from "@/models/userModel";
 import { NextRequest, NextResponse } from "next/server";
 
-connect();
+
 
 export async function POST(request: NextRequest) {
   try {
+    await connect();
     const reqBody = await request.json();
     const { username, email, password } = reqBody as {
       username: string;
@@ -14,12 +15,12 @@ export async function POST(request: NextRequest) {
     };
 
     if (!username || !email || !password) {
-      return NextResponse.json({ error: "all fields are required" }, { status: 400 });
+      return NextResponse.json({ error: "All fields are required" }, { status: 400 });
     }
 
     const user = await User.findOne({ email });
     if (user) {
-      return NextResponse.json({ error: "user already exists" }, { status: 400 });
+      return NextResponse.json({ error: "User already exists" }, { status: 400 });
     }
 
     const newUser = new User({
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest) {
     const savedUser = await newUser.save();
 
     return NextResponse.json(
-      { message: "user created successfully", success: true, user: savedUser },
+      { message: "User created successfully", success: true, user: savedUser },
       { status: 201 }
     );
   } catch (error: unknown) {

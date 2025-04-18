@@ -2,27 +2,27 @@ import { NextRequest, NextResponse } from "next/server";
 import Session from "@/models/sessionModel";
 import Question from "@/models/questionModel";
 import { connect } from "@/dbConfig/dbConfig";
-import { shuffle } from "lodash";  //library for shuffle function
+import { shuffle } from "lodash"; // Library for shuffle function
 
-connect();
+
 
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ sessionId: string }> }
 ) {
   try {
-    const resolvedParams = await context.params;
-    const sessionId = resolvedParams.sessionId;
+    await connect();
+    const { sessionId } = await context.params;
 
     if (!sessionId) {
-      return NextResponse.json({ error: "session id is required" }, { status: 400 });
+      return NextResponse.json({ error: "Session ID is required" }, { status: 400 });
     }
 
-    console.log("fetching session for session id:", sessionId);
+    console.log("Fetching session for session ID:", sessionId);
 
     const session = await Session.findById(sessionId).populate("quiz_id");
     if (!session) {
-      return NextResponse.json({ error: "session not found" }, { status: 404 });
+      return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
     const now = new Date();
@@ -31,23 +31,32 @@ export async function GET(
         session.is_active = false;
         await session.save();
       }
-      return NextResponse.json({ error: "session expired" }, { status: 400 });
+      return NextResponse.json({ error: "Session expired" }, { status: 400 });
     }
 
     let questions = await Question.find({ quiz_id: session.quiz_id._id });
     if (questions.length === 0) {
-      return NextResponse.json({ error: "no questions available for this quiz" }, { status: 404 });
+      return NextResponse.json({ error: "No questions available for this quiz" }, { status: 404 });
     }
 
-
-    questions = shuffle(questions);
-
-
-    questions = questions.map((question) => {
-      if (question.question_type === "MCQ" && question.options && question.options.length) {
+    questions = shuffle(questions).map((question) => {
+      if (
+        (question.question_type === "MCQ" ||
+          question.question_type === "Ranking" ||
+          question.question_type === "Image") &&
+        question.options?.length
+      ) {
         question.options = shuffle(question.options);
       }
-      return question;
+      return {
+        _id: question._id,
+        question_text: question.question_text,
+        question_type: question.question_type,
+        options: question.options || [],
+        media_url: question.media_url || "",
+        hint: question.hint || "",
+        points: question.points,
+      };
     });
 
     return NextResponse.json(
@@ -57,11 +66,12 @@ export async function GET(
         quiz: session.quiz_id,
         questions,
         duration: session.quiz_id.duration,
+        start_time: session.start_time, // ✅ Added Start Time
       },
       { status: 200 }
     );
   } catch (error) {
-    console.error("error fetching session details:", error);
-    return NextResponse.json({ error: "internal server error" }, { status: 500 });
+    console.error("Error fetching session details:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

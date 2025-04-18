@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import PlayerQuiz from "@/models/playerQuizModel";
 import { connect } from "@/dbConfig/dbConfig";
 
-connect();
+
 
 export async function PATCH(request: NextRequest) {
   console.log("PATCH /api/player-quiz-settings was called!"); // debug ke liye
   try {
+
+    await connect();
 
     const body = await request.json();
     
@@ -15,7 +17,7 @@ export async function PATCH(request: NextRequest) {
     const { playerQuizId, avatar, displayName } = body;
 
     if (!playerQuizId) {
-      return NextResponse.json({ error: "playerQuizId is required" }, { status: 400 });
+      return NextResponse.json({ error: "PlayerQuizId is required" }, { status: 400 });
     }
 
     

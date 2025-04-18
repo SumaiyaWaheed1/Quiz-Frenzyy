@@ -2,15 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import Session from "@/models/sessionModel";
 import { connect } from "@/dbConfig/dbConfig";
 
-connect();
+
 
 export async function GET(request: NextRequest) {
   try {
+    await connect();
     const { searchParams } = new URL(request.url);
     const quizId = searchParams.get("quizId");
 
     if (!quizId) {
-      return NextResponse.json({ error: "quizId is required" }, { status: 400 });
+      return NextResponse.json({ error: "Quiz Id is required" }, { status: 400 });
     }
 
     // Find all sessions for the given quiz id, sorted by createdAt descending (newest first)

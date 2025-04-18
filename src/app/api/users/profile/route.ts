@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
 import "@/models/quizModel";
 
-connect();
+
 
 type UpdateData = {
   username?: string;
@@ -15,14 +15,15 @@ type UpdateData = {
 
 export async function GET(request: NextRequest) {
   try {
+    await connect();
     const token = request.cookies.get("authToken")?.value;
     if (!token) {
-      return NextResponse.json({ error: "unauthorized access" }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized access" }, { status: 401 });
     }
 
     if (!process.env.JWT_SECRET) {
       console.error("jwt_secret is missing in environment variables");
-      return NextResponse.json({ error: "server configuration error" }, { status: 500 });
+      return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
     }
 
     let decoded;
@@ -30,11 +31,11 @@ export async function GET(request: NextRequest) {
       decoded = jwt.verify(token, process.env.JWT_SECRET) as { id: string };
     } catch (error) {
       console.error("jwt verification failed:", error);
-      return NextResponse.json({ error: "invalid or expired token" }, { status: 401 });
+      return NextResponse.json({ error: "Invalid or expired token" }, { status: 401 });
     }
 
     if (!decoded || !decoded.id) {
-      return NextResponse.json({ error: "invalid token structure" }, { status: 401 });
+      return NextResponse.json({ error: "Invalid token structure" }, { status: 401 });
     }
 
     const user = await User.findById(decoded.id)
@@ -42,7 +43,7 @@ export async function GET(request: NextRequest) {
       .populate("hosted_quizzes", "title description created_at");
 
     if (!user) {
-      return NextResponse.json({ error: "user not found" }, { status: 404 });
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     return NextResponse.json(
@@ -51,7 +52,7 @@ export async function GET(request: NextRequest) {
     );
   } catch (error) {
     console.error("error fetching user profile:", error);
-    return NextResponse.json({ error: "internal server error" }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 

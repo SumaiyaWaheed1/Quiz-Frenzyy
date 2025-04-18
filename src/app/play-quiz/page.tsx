@@ -7,6 +7,8 @@ import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import type { DropResult } from "@hello-pangea/dnd";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import Image from "next/image";
+
 
 interface Question {
   _id: string;
@@ -22,6 +24,7 @@ interface QuizInfo {
   title: string;
   description: string;
   duration?: number; // duration in minutes
+  start_time: string; // ISO format timestamp
 }
 
 function PlayQuizContent() {
@@ -33,7 +36,9 @@ function PlayQuizContent() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [quizInfo, setQuizInfo] = useState<QuizInfo | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [introStage, setIntroStage] = useState<"loading" | "intro" | "quiz">("loading");
+  // Since we use global loading via Suspense, we assume that once data is ready, we can show the quiz.
+  // Set introStage to "quiz" once data is ready.
+  const [introStage, setIntroStage] = useState<"quiz">("quiz");
 
   const [selectedAnswers, setSelectedAnswers] = useState<{ [qId: string]: string }>({});
   const [rankingAnswers, setRankingAnswers] = useState<{ [qId: string]: string[] }>({});
@@ -43,7 +48,7 @@ function PlayQuizContent() {
   useEffect(() => {
     async function fetchQuizData() {
       if (!session_id || !player_quiz_id) {
-        alert("Missing session or quiz ID.");
+        // Redirect if IDs are missing
         router.push("/");
         return;
       }
@@ -54,7 +59,7 @@ function PlayQuizContent() {
         if (data.success) {
           setQuestions(data.questions || []);
 
-          // Shuffle ranking answers
+          // Shuffle ranking answers for Ranking type questions
           const initialRankingAnswers: { [qId: string]: string[] } = {};
           (data.questions || []).forEach((q: Question) => {
             if (q.question_type === "Ranking") {
@@ -67,17 +72,26 @@ function PlayQuizContent() {
           setQuizInfo({
             title: data.quiz?.title || "Untitled Quiz",
             description: data.quiz?.description || "",
-            duration: data.quiz?.duration || 5, // fallback to 5 min
+            duration: data.duration || 5, // fallback to 5 min
+            start_time: data.start_time || new Date().toISOString(),
           });
 
-          setTimeLeft((data.quiz?.duration || 5) * 60); // convert to seconds
-          setIntroStage("intro");
-          setTimeout(() => setIntroStage("quiz"), 2000);
+          // Calculate remaining time based on start_time and duration
+          const quizDurationSeconds = (data.duration || 5) * 60;
+          const startTime = new Date(data.start_time || new Date().toISOString());
+          const now = new Date();
+          const elapsedSeconds = Math.floor((now.getTime() - startTime.getTime()) / 1000);
+          const remainingSeconds = quizDurationSeconds - elapsedSeconds;
+          setTimeLeft(remainingSeconds > 0 ? remainingSeconds : 0);
+          // We don’t need to delay quiz start if using global loader.
+          setIntroStage("quiz");
         } else {
-          alert("No questions found.");
+          // If no questions found, you can redirect or handle as needed.
+          router.push("/");
         }
-      } catch {
-        alert("Error fetching quiz.");
+      } catch (error) {
+        console.error("Error fetching quiz:", error);
+        router.push("/");
       }
     }
 
@@ -101,9 +115,7 @@ function PlayQuizContent() {
   }, [introStage, timeLeft]);
 
   const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
-      .toString()
-      .padStart(2, "0");
+    const mins = Math.floor(seconds / 60).toString().padStart(2, "0");
     const secs = (seconds % 60).toString().padStart(2, "0");
     return `${mins}:${secs}`;
   };
@@ -166,9 +178,9 @@ function PlayQuizContent() {
                           ref={provided.innerRef}
                           {...provided.draggableProps}
                           {...provided.dragHandleProps}
-                          className={`p-3 mb-3 rounded-full text-sm sm:text-base 
-                          ${snapshot.isDragging ? "bg-white text-[#ec5f80]" : "bg-[#333436] text-white"}
-                          border border-[#ff3c83] hover:bg-white hover:text-[#ec5f80]`}
+                          className={`p-3 mb-3 rounded-full text-sm sm:text-base ${
+                            snapshot.isDragging ? "bg-white text-[#ec5f80]" : "bg-[#333436] text-white"
+                          } border border-[#ff3c83] hover:bg-white hover:text-[#ec5f80]`}
                           style={provided.draggableProps.style}
                         >
                           {option}
@@ -189,9 +201,11 @@ function PlayQuizContent() {
           <div className="space-y-4 mt-6 w-full">
             {question.media_url && (
               <div className="w-full flex justify-center">
-                <img
+                <Image
                   src={question.media_url}
                   alt="Question"
+                  width={500} // Adjust as needed
+                  height={400} // Adjust as needed
                   className="rounded-lg max-w-full h-auto max-h-[300px] sm:max-h-[350px] md:max-h-[400px] object-contain"
                 />
               </div>
@@ -236,7 +250,12 @@ function PlayQuizContent() {
   };
 
   const currentQuestion = questions[currentQuestionIndex];
-  const progressPercent = ((currentQuestionIndex + 1) / questions.length) * 100;
+  const progressPercent = questions.length > 0 ? ((currentQuestionIndex + 1) / questions.length) * 100 : 0;
+
+  // Do not render anything until questions and quizInfo are loaded.
+  if (!quizInfo || questions.length === 0 || timeLeft === null) {
+    return null;
+  }
 
   return (
     <>
@@ -247,48 +266,36 @@ function PlayQuizContent() {
 
             {/* Timer & Progress Bar */}
             {introStage === "quiz" && (
-              <div className="mb-4 flex justify-between items-center text-white text-sm sm:text-base font-semibold">
-                <div>
-                  Time Left:{" "}
-                  <span className={timeLeft !== null && timeLeft <= 15 ? "text-red-400" : "text-[#ec5f80]"}>
-                    {timeLeft !== null ? formatTime(timeLeft) : "--:--"}
-                  </span>
-                </div>
-                <div>
-                  {currentQuestionIndex + 1} / {questions.length}
-                </div>
-              </div>
-            )}
-
-            {introStage === "quiz" && (
-              <div className="w-full bg-[#1e1e1e] rounded-full h-2 mb-6">
-                <div
-                  className="bg-[#ff3c83] h-2 rounded-full transition-all duration-500 ease-in-out"
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-            )}
-
-            {/* Loading/Intro Stage */}
-            {introStage === "loading" && (
-              <p className="text-white text-xl font-semibold">Loading quiz...</p>
-            )}
-
-            {introStage === "intro" && quizInfo && (
               <>
-                <h1 className="text-3xl sm:text-4xl text-white mb-4 font-semibold">{quizInfo.title}</h1>
-                <p className="text-gray-400">{quizInfo.description}</p>
-                <div className="mt-4">
-                  <span className="loader inline-block w-6 h-6 border-4 border-t-transparent border-[#ff3c83] rounded-full animate-spin"></span>
+                <div className="mb-4 flex justify-between items-center text-white text-sm sm:text-base font-semibold">
+                  <div>
+                    Time Left:{" "}
+                    <span className={timeLeft <= 15 ? "text-red-400" : "text-[#ec5f80]"}>
+                      {formatTime(timeLeft)}
+                    </span>
+                  </div>
+                  <div>
+                    {currentQuestionIndex + 1} / {questions.length}
+                  </div>
+                </div>
+                <div className="w-full bg-[#1e1e1e] rounded-full h-2 mb-6">
+                  <div
+                    className="bg-[#ff3c83] h-2 rounded-full transition-all duration-500 ease-in-out"
+                    style={{ width: `${progressPercent}%` }}
+                  />
                 </div>
               </>
             )}
 
-            {introStage === "quiz" && questions.length > 0 && (
+            {/* Quiz Content */}
+            {introStage === "quiz" && (
               <>
+              <p className="text-sm text-white mb-4">{currentQuestion.question_type}</p>
                 <h2 className="text-2xl sm:text-3xl text-white font-semibold mb-4">
                   {currentQuestion.question_text}
                 </h2>
+                
+
                 {renderQuestion(currentQuestion)}
 
                 {/* Navigation Buttons */}
